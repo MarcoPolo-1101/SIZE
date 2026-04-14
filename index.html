@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
    
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -10,7 +10,6 @@
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            touch-action: none;
             -webkit-touch-callout: none;
             -webkit-user-select: none;
             user-select: none;
@@ -22,7 +21,6 @@
         #canvas {
             display: block;
             background: #f8fafc;
-            touch-action: none;
             cursor: default;
         }
         .tool-btn {
@@ -1719,6 +1717,125 @@
             state.transform.y = y - worldY * newScale;
             
             draw();
+        };
+        
+        // 触摸事件处理：支持移动端平移和缩放
+        canvas.ontouchstart = (e) => {
+            e.preventDefault();
+            const touches = e.touches;
+            const rect = canvas.getBoundingClientRect();
+            
+            if (touches.length === 1) {
+                // 单指：准备平移或绘制
+                const touch = touches[0];
+                const x = touch.clientX - rect.left;
+                const y = touch.clientY - rect.top;
+                
+                // 先处理点击关闭弹窗
+                closeContextMenu();
+                closeAllModals();
+                
+                // 记录单指起始位置
+                touchStartMidpoint = { x, y };
+                touchStartPan = { ...state.transform };
+                
+                // 模拟鼠标按下事件，支持绘制和选择
+                const mouseEvent = new MouseEvent('mousedown', {
+                    clientX: touch.clientX,
+                    clientY: touch.clientY,
+                    button: 0
+                });
+                canvas.dispatchEvent(mouseEvent);
+            } else if (touches.length === 2) {
+                // 双指：准备缩放和平移
+                const touch1 = touches[0];
+                const touch2 = touches[1];
+                
+                const x1 = touch1.clientX - rect.left;
+                const y1 = touch1.clientY - rect.top;
+                const x2 = touch2.clientX - rect.left;
+                const y2 = touch2.clientY - rect.top;
+                
+                // 计算初始距离和中点
+                touchStartDistance = Math.hypot(x2 - x1, y2 - y1);
+                touchStartMidpoint = {
+                    x: (x1 + x2) / 2,
+                    y: (y1 + y2) / 2
+                };
+                touchStartPan = { ...state.transform };
+                
+                // 取消当前的拖拽状态，避免冲突
+                state.isDragging = false;
+                state.isPanning = false;
+            }
+        };
+        
+        canvas.ontouchmove = (e) => {
+            e.preventDefault();
+            const touches = e.touches;
+            const rect = canvas.getBoundingClientRect();
+            
+            if (touches.length === 1 && touchStartDistance === null) {
+                // 单指移动：模拟鼠标移动
+                const touch = touches[0];
+                const mouseEvent = new MouseEvent('mousemove', {
+                    clientX: touch.clientX,
+                    clientY: touch.clientY,
+                    button: 0
+                });
+                canvas.dispatchEvent(mouseEvent);
+            } else if (touches.length === 2) {
+                // 双指移动：处理缩放和平移
+                const touch1 = touches[0];
+                const touch2 = touches[1];
+                
+                const x1 = touch1.clientX - rect.left;
+                const y1 = touch1.clientY - rect.top;
+                const x2 = touch2.clientX - rect.left;
+                const y2 = touch2.clientY - rect.top;
+                
+                // 计算新的距离和中点
+                const newDistance = Math.hypot(x2 - x1, y2 - y1);
+                const newMidpoint = {
+                    x: (x1 + x2) / 2,
+                    y: (y1 + y2) / 2
+                };
+                
+                // 计算缩放因子
+                const scaleFactor = newDistance / touchStartDistance;
+                const newScale = Math.max(0.01, Math.min(2, touchStartPan.scale * scaleFactor));
+                
+                // 计算中点的偏移，实现以双指中心为原点缩放
+                const worldX = (touchStartMidpoint.x - touchStartPan.x) / touchStartPan.scale;
+                const worldY = (touchStartMidpoint.y - touchStartPan.y) / touchStartPan.scale;
+                
+                // 更新变换
+                state.transform.scale = newScale;
+                state.transform.x = newMidpoint.x - worldX * newScale;
+                state.transform.y = newMidpoint.y - worldY * newScale;
+                
+                draw();
+            }
+        };
+        
+        canvas.ontouchend = (e) => {
+            e.preventDefault();
+            
+            if (e.touches.length === 0) {
+                // 模拟鼠标松开事件
+                const touch = e.changedTouches[0];
+                const mouseEvent = new MouseEvent('mouseup', {
+                    clientX: touch.clientX,
+                    clientY: touch.clientY,
+                    button: 0
+                });
+                canvas.dispatchEvent(mouseEvent);
+                
+                // 重置触摸状态
+                touchStartDistance = null;
+                touchStartMidpoint = null;
+                touchStartPan = null;
+            }
         };
 
         canvas.ondblclick = (e) => {
