@@ -1,0 +1,1846 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+   
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            touch-action: none;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        body {
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        #canvas {
+            display: block;
+            background: #f8fafc;
+            touch-action: none;
+            cursor: default;
+        }
+        .tool-btn {
+            min-width: 48px;
+            min-height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            /* 移动端优化：增大点击区域 */
+            padding: 8px;
+        }
+        @media (max-width: 640px) {
+            .tool-btn {
+                min-width: 56px;
+                min-height: 56px;
+                font-size: 1.25rem;
+            }
+            
+            /* 移动端工具栏优化 */
+            #toolbar {
+                top: 10px;
+                left: 50%;
+                transform: translateX(-50%);
+                justify-content: center;
+                max-width: 95vw;
+            }
+            
+            #actionbar {
+                top: auto;
+                bottom: 10px;
+                right: 50%;
+                transform: translateX(50%);
+                max-width: 95vw;
+                justify-content: center;
+            }
+            
+            /* 确保按钮不会重叠 */
+            .tool-btn {
+                flex-shrink: 0;
+            }
+        }
+        .tool-btn.active {
+            background: #3b82f6 !important;
+            color: white;
+        }
+        .dir-modal-mask {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 999;
+        }
+        .dir-modal {
+            position: fixed;
+            /* 移动端优化：调整模态框大小和位置 */
+            max-width: 90vw;
+            width: 320px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 24px;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            z-index: 1000;
+            width: 300px;
+        }
+        .dir-input {
+            width: 100%;
+            padding: 14px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 18px;
+            margin: 12px 0;
+            text-align: center;
+        }
+        .dir-btn {
+            padding: 16px;
+            border-radius: 12px;
+            border: none;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .dir-btn:hover {
+            background: #dbeafe;
+        }
+        .dir-btn:active {
+            transform: scale(0.95);
+        }
+        .param-modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 24px;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            z-index: 1000;
+            width: 320px;
+        }
+        .param-group {
+            margin-bottom: 16px;
+        }
+        .param-label {
+            display: block;
+            font-size: 14px;
+            color: #64748b;
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+        .param-input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: all 0.2s;
+        }
+        .param-input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        .param-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+        }
+        .param-btn {
+            flex: 1;
+            padding: 12px;
+            border-radius: 8px;
+            border: none;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        .param-btn-primary {
+            background: #3b82f6;
+            color: white;
+        }
+        .param-btn-primary:hover {
+            background: #2563eb;
+        }
+        .param-btn-secondary {
+            background: #f3f4f6;
+            color: #374151;
+        }
+        .param-btn-secondary:hover {
+            background: #e5e7eb;
+        }
+        .context-menu {
+            position: fixed;
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            padding: 4px 0;
+            z-index: 1000;
+            min-width: 160px;
+        }
+        .context-menu-item {
+            padding: 10px 16px;
+            cursor: pointer;
+            transition: all 0.1s;
+            font-size: 14px;
+        }
+        .context-menu-item:hover {
+            background: #f1f5f9;
+        }
+        @media (max-width: 768px) {
+            .toolbar {
+                flex-wrap: wrap;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="toolbar bg-white shadow-md p-2 flex gap-1 flex-wrap items-center">
+        <button id="tool-select" class="tool-btn active bg-gray-200 rounded-lg text-sm" title="选择/移动">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"></path>
+            </svg>
+        </button>
+        <button id="tool-line" class="tool-btn bg-gray-200 rounded-lg text-sm" title="绘制直线">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 4L4 20"></path>
+            </svg>
+        </button>
+        <button id="tool-leader-text" class="tool-btn bg-gray-200 rounded-lg text-sm" title="引线文本">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"></path>
+            </svg>
+        </button>
+        <div class="w-px h-8 bg-gray-300 mx-1"></div>
+        <button id="btn-undo" class="tool-btn bg-gray-200 rounded-lg text-sm" title="撤销">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"></path>
+            </svg>
+        </button>
+        <button id="btn-redo" class="tool-btn bg-gray-200 rounded-lg text-sm" title="重做">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6"></path>
+            </svg>
+        </button>
+        <div class="w-px h-8 bg-gray-300 mx-1"></div>
+        <div class="flex items-center gap-1 px-2">
+            <span class="text-xs text-gray-600">比例:</span>
+            <select id="scale-select" class="text-sm border rounded px-2 py-1 h-9">
+                <option value="0.05">1:200</option>
+                <option value="0.1" selected>1:100</option>
+                <option value="0.2">1:50</option>
+                <option value="0.5">1:20</option>
+                <option value="1">1:10</option>
+            </select>
+        </div>
+        <div class="w-px h-8 bg-gray-300 mx-1"></div>
+        <button id="btn-export-png" class="tool-btn bg-green-500 text-white rounded-lg text-sm" title="导出图片(PNG)">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+            </svg>
+            <span class="ml-1 hidden sm:inline">导出图片</span>
+        </button>
+    </div>
+    <div class="h-[calc(100vh-64px)]">
+        <div class="w-full h-full relative overflow-hidden">
+            <canvas id="canvas"></canvas>
+            <div id="size-hint" class="hidden absolute bg-black/70 text-white text-xs px-2 py-1 rounded pointer-events-none z-10"></div>
+        </div>
+    </div>
+    <div id="dir-mask" class="dir-modal-mask hidden"></div>
+    <div id="dir-modal" class="dir-modal hidden">
+        <h3 class="text-lg font-bold text-center">选择绘制方向</h3>
+        <p class="text-center text-gray-500 text-sm">点击方向按钮绘制正交直线</p>
+        <input type="number" id="dir-length-input" class="dir-input" placeholder="长度(mm)" value="3000">
+        <div class="grid grid-cols-3 gap-3">
+            <button class="dir-btn bg-gray-100 text-xl py-3" data-dir="up-left">↖</button>
+            <button class="dir-btn bg-gray-100 text-xl py-3" data-dir="up">↑</button>
+            <button class="dir-btn bg-gray-100 text-xl py-3" data-dir="up-right">↗</button>
+            <button class="dir-btn bg-gray-100 text-xl py-3" data-dir="left">←</button>
+            <button class="dir-btn bg-gray-100 text-xl py-3" data-dir="center">-</button>
+            <button class="dir-btn bg-gray-100 text-xl py-3" data-dir="right">→</button>
+            <button class="dir-btn bg-gray-100 text-xl py-3" data-dir="down-left">↙</button>
+            <button class="dir-btn bg-gray-100 text-xl py-3" data-dir="down">↓</button>
+            <button class="dir-btn bg-gray-100 text-xl py-3" data-dir="down-right">↘</button>
+        </div>
+        <button id="cancel-dir" class="dir-btn w-full mt-3 bg-gray-200 py-3 text-lg">取消</button>
+    </div>
+    <div id="param-mask" class="dir-modal-mask hidden"></div>
+    <div id="param-modal" class="param-modal hidden">
+        <h3 class="text-lg font-bold mb-4">属性设置</h3>
+        <div id="param-content"></div>
+        <div class="param-buttons">
+            <button id="param-cancel" class="param-btn param-btn-secondary">取消</button>
+            <button id="param-ok" class="param-btn param-btn-primary">确定</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const originalCtx = canvas.getContext('2d');
+        const dirModal = document.getElementById('dir-modal');
+        const dirMask = document.getElementById('dir-mask');
+        const paramModal = document.getElementById('param-modal');
+        const paramMask = document.getElementById('param-mask');
+        
+        const state = {
+            currentTool: 'select',
+            selectedItem: null,
+            isDragging: false,
+            dragStart: { x: 0, y: 0 },
+            editingEndpoint: null,
+            tempLine: null,
+            items: [],
+            history: [],
+            historyIndex: -1,
+            transform: { x: 50, y: 50, scale: 0.1 },
+            isPanning: false,
+            panStart: { x: 0, y: 0 },
+            currentLineStart: null,
+            currentEditingItem: null,
+            currentEditingBackup: null,
+            contextMenu: null
+        };
+
+        // 关闭所有弹窗
+        function closeAllModals() {
+            dirModal.classList.add('hidden');
+            dirMask.classList.add('hidden');
+            paramModal.classList.add('hidden');
+            paramMask.classList.add('hidden');
+            closeContextMenu();
+            // 重置连续绘制的起点状态
+            state.currentLineStart = null;
+        }
+
+        // 关闭右键菜单
+        function closeContextMenu() {
+            if (state.contextMenu) {
+                if (document.body.contains(state.contextMenu)) {
+                    document.body.removeChild(state.contextMenu);
+                }
+                state.contextMenu = null;
+            }
+        }
+
+        // 点击遮罩关闭弹窗
+        dirMask.onclick = closeAllModals;
+        paramMask.onclick = closeAllModals;
+
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            draw();
+        }
+
+        function screenToWorld(sx, sy) {
+            return {
+                x: (sx - state.transform.x) / state.transform.scale,
+                y: (sy - state.transform.y) / state.transform.scale
+            };
+        }
+
+        function worldToScreen(wx, wy) {
+            return {
+                x: wx * state.transform.scale + state.transform.x,
+                y: wy * state.transform.scale + state.transform.y,
+            };
+        }
+
+        function snapToGrid(value, grid = 100) {
+            return Math.round(value / grid) * grid;
+        }
+
+        function drawGrid(ctx) {
+            const gridSize = 100;
+            const screenGrid = gridSize * state.transform.scale;
+            
+            const start = screenToWorld(0, 0);
+            const end = screenToWorld(canvas.width, canvas.height);
+            
+            ctx.strokeStyle = '#e2e8f0';
+            ctx.lineWidth = 1;
+            
+            for (let x = Math.floor(start.x / gridSize) * gridSize; x < end.x; x += gridSize) {
+                const p1 = worldToScreen(x, start.y);
+                const p2 = worldToScreen(x, end.y);
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.stroke();
+            }
+            
+            for (let y = Math.floor(start.y / gridSize) * gridSize; y < end.y; y += gridSize) {
+                const p1 = worldToScreen(start.x, y);
+                const p2 = worldToScreen(end.x, y);
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.stroke();
+            }
+            
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 2;
+            const bigGrid = 500;
+            for (let x = Math.floor(start.x / bigGrid) * bigGrid; x < end.x; x += bigGrid) {
+                const p1 = worldToScreen(x, start.y);
+                const p2 = worldToScreen(x, end.y);
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.stroke();
+            }
+            for (let y = Math.floor(start.y / bigGrid) * bigGrid; y < end.y; y += bigGrid) {
+                const p1 = worldToScreen(start.x, y);
+                const p2 = worldToScreen(end.x, y);
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.stroke();
+            }
+        }
+
+        function drawDimension(ctx, x1, y1, x2, y2, color = '#64748b') {
+            const p1 = worldToScreen(x1, y1);
+            const p2 = worldToScreen(x2, y2);
+            const length = Math.round(Math.hypot(x2 - x1, y2 - y1));
+            
+            // 尺寸标识线使用半透明黑色
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+            
+            const offset = 20;
+            const angle = Math.atan2(y2 - y1, x2 - x1);
+            const dx = -Math.sin(angle) * offset;
+            const dy = Math.cos(angle) * offset;
+            
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p1.x + dx, p1.y + dy);
+            ctx.moveTo(p2.x, p2.y);
+            ctx.lineTo(p2.x + dx, p2.y + dy);
+            ctx.stroke();
+            
+            const arrowSize = 5;
+            ctx.beginPath();
+            ctx.moveTo(p1.x + dx, p1.y + dy);
+            ctx.lineTo(p1.x + dx - Math.cos(angle - Math.PI/4) * arrowSize, p1.y + dy - Math.sin(angle - Math.PI/4) * arrowSize);
+            ctx.moveTo(p1.x + dx, p1.y + dy);
+            ctx.lineTo(p1.x + dx - Math.cos(angle + Math.PI/4) * arrowSize, p1.y + dy - Math.sin(angle + Math.PI/4) * arrowSize);
+            
+            ctx.moveTo(p2.x + dx, p2.y + dy);
+            ctx.lineTo(p2.x + dx - Math.cos(angle - Math.PI + Math.PI/4) * arrowSize, p2.y + dy - Math.sin(angle - Math.PI + Math.PI/4) * arrowSize);
+            ctx.moveTo(p2.x + dx, p2.y + dy);
+            ctx.lineTo(p2.x + dx - Math.cos(angle - Math.PI - Math.PI/4) * arrowSize, p2.y + dy - Math.sin(angle - Math.PI - Math.PI/4) * arrowSize);
+            ctx.stroke();
+            
+            const midX = (p1.x + p2.x) / 2 + dx;
+            const midY = (p1.y + p2.y) / 2 + dy;
+            ctx.fillStyle = color;
+            ctx.font = '12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(length + 'mm', midX, midY);
+        }
+
+        function drawItems(ctx) {
+            state.items.forEach(item => {
+                const isSelected = state.selectedItem === item;
+                
+                if (item.type === 'line') {
+                    const p1 = worldToScreen(item.x1, item.y1);
+                    const p2 = worldToScreen(item.x2, item.y2);
+                    
+                    const arrowColor = item.arrowColor;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(p1.x, p1.y);
+                    ctx.lineTo(p2.x, p2.y);
+                    // 强制设置为纯黑色，确保没有透明度
+                    ctx.strokeStyle = 'rgb(0, 0, 0)';
+                    ctx.lineWidth = 2;
+                    ctx.lineCap = 'round';
+                    ctx.stroke();
+                    
+                    // 绘制小箭头表示方向
+                    const arrowSize = 6;
+                    const arrowDistance = 50; // 箭头距离起点的距离
+                    const dx = p2.x - p1.x;
+                    const dy = p2.y - p1.y;
+                    const length = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (length > arrowDistance * 2) {
+                        // 计算箭头位置（在线段中间）
+                        const arrowX = p1.x + (dx * 0.5);
+                        const arrowY = p1.y + (dy * 0.5);
+                        
+                        // 计算箭头方向
+                        const angle = Math.atan2(dy, dx);
+                        
+                        ctx.beginPath();
+                        ctx.moveTo(arrowX, arrowY);
+                        ctx.lineTo(
+                            arrowX - arrowSize * Math.cos(angle - Math.PI / 6),
+                            arrowY - arrowSize * Math.sin(angle - Math.PI / 6)
+                        );
+                        ctx.moveTo(arrowX, arrowY);
+                        ctx.lineTo(
+                            arrowX - arrowSize * Math.cos(angle + Math.PI / 6),
+                            arrowY - arrowSize * Math.sin(angle + Math.PI / 6)
+                        );
+                        ctx.strokeStyle = arrowColor;
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+                    }
+                    
+                    drawDimension(ctx, item.x1, item.y1, item.x2, item.y2, arrowColor);
+                }
+                else if (item.type === 'rect') {
+                    const p1 = worldToScreen(item.x1, item.y1);
+                    const p2 = worldToScreen(item.x2, item.y2);
+                    const x = Math.min(p1.x, p2.x);
+                    const y = Math.min(p1.y, p2.y);
+                    const w = Math.abs(p2.x - p1.x);
+                    const h = Math.abs(p2.y - p1.y);
+                    
+                    ctx.fillStyle = isSelected ? 'rgba(59, 130, 246, 0.2)' : 'rgba(59, 130, 246, 0.1)';
+                    ctx.strokeStyle = isSelected ? '#3b82f6' : '#3b82f6';
+                    ctx.lineWidth = isSelected ? 3 : 2;
+                    ctx.fillRect(x, y, w, h);
+                    ctx.strokeRect(x, y, w, h);
+                }
+                else if (item.type === 'arc') {
+                    const p = worldToScreen(item.cx, item.cy);
+                    const screenRadius = item.radius * state.transform.scale;
+                    
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, screenRadius, item.startAngle, item.endAngle);
+                    ctx.strokeStyle = isSelected ? '#3b82f6' : '#3b82f6';
+                    ctx.lineWidth = isSelected ? 3 : 2;
+                    ctx.stroke();
+                }
+                else if (item.type === 'leader-text') {
+                    const start = worldToScreen(item.startX, item.startY);
+                    const end = worldToScreen(item.endX, item.endY);
+                    
+                    // 绘制引线
+                    ctx.beginPath();
+                    ctx.moveTo(start.x, start.y);
+                    ctx.lineTo(end.x, end.y);
+                    ctx.strokeStyle = isSelected ? '#3b82f6' : '#22c55e';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    
+                    // 绘制箭头
+                    const angle = Math.atan2(end.y - start.y, end.x - start.x);
+                    const arrowSize = 8;
+                    ctx.beginPath();
+                    ctx.moveTo(start.x, start.y);
+                    ctx.lineTo(start.x + Math.cos(angle - Math.PI/6) * arrowSize, start.y + Math.sin(angle - Math.PI/6) * arrowSize);
+                    ctx.moveTo(start.x, start.y);
+                    ctx.lineTo(start.x + Math.cos(angle + Math.PI/6) * arrowSize, start.y + Math.sin(angle + Math.PI/6) * arrowSize);
+                    ctx.stroke();
+                    
+                    // 绘制文本
+                    ctx.fillStyle = '#1e293b';
+                    ctx.font = '14px sans-serif';
+                    ctx.textAlign = 'left';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(item.text, end.x + 10, end.y);
+                    
+                    // 如果选中，绘制文本框边框
+                    if (isSelected) {
+                        const metrics = ctx.measureText(item.text);
+                        const textWidth = metrics.width;
+                        const textHeight = 20;
+                        ctx.strokeStyle = '#3b82f6';
+                        ctx.lineWidth = 2;
+                        ctx.strokeRect(end.x + 5, end.y - textHeight/2, textWidth + 10, textHeight);
+                    }
+                }
+            });
+        }
+
+        function drawTempLine(ctx) {
+            if (state.tempLine) {
+                const p1 = worldToScreen(state.tempLine.x1, state.tempLine.y1);
+                const p2 = worldToScreen(state.tempLine.x2, state.tempLine.y2);
+                
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.strokeStyle = '#3b82f6';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+        }
+
+        function draw() {
+            originalCtx.clearRect(0, 0, canvas.width, canvas.height);
+            drawGrid(originalCtx);
+            drawItems(originalCtx);
+            drawTempLine(originalCtx);
+        }
+
+        function saveState() {
+            state.history = state.history.slice(0, state.historyIndex + 1);
+            state.history.push(JSON.stringify(state.items));
+            state.historyIndex++;
+        }
+
+        function findItemAt(x, y, threshold = 10) {
+            for (let i = state.items.length - 1; i >= 0; i--) {
+                const item = state.items[i];
+                
+                if (item.type === 'line') {
+                    const p1 = worldToScreen(item.x1, item.y1);
+                    const p2 = worldToScreen(item.x2, item.y2);
+                    
+                    const d = distancePointToLine(x, y, p1.x, p1.y, p2.x, p2.y);
+                    if (d <= threshold) {
+                        return item;
+                    }
+                }
+                else if (item.type === 'rect') {
+                    const p1 = worldToScreen(item.x1, item.y1);
+                    const p2 = worldToScreen(item.x2, item.y2);
+                    const rectX = Math.min(p1.x, p2.x);
+                    const rectY = Math.min(p1.y, p2.y);
+                    const rectW = Math.abs(p2.x - p1.x);
+                    const rectH = Math.abs(p2.y - p1.y);
+                    
+                    if (x >= rectX - threshold && x <= rectX + rectW + threshold && y >= rectY - threshold && y <= rectY + rectH + threshold) {
+                        return item;
+                    }
+                }
+                else if (item.type === 'arc') {
+                    const center = worldToScreen(item.cx, item.cy);
+                    const radius = item.radius * state.transform.scale;
+                    
+                    const d = Math.hypot(x - center.x, y - center.y);
+                    
+                    if (Math.abs(d - radius) <= threshold) {
+                        const angle = Math.atan2(y - center.y, x - center.x);
+                        let adjustedAngle = angle < 0 ? angle + 2 * Math.PI : angle;
+                        
+                        if (adjustedAngle >= item.startAngle && adjustedAngle <= item.endAngle) {
+                            return item;
+                        }
+                    }
+                }
+                else if (item.type === 'leader-text') {
+                    const start = worldToScreen(item.startX, item.startY);
+                    const end = worldToScreen(item.endX, item.endY);
+                    
+                    // 检查是否点击在引线上
+                    const d = distancePointToLine(x, y, start.x, start.y, end.x, end.y);
+                    if (d <= threshold) {
+                        return item;
+                    }
+                    
+                    // 检查是否点击在文本框上
+                    const metrics = originalCtx.measureText(item.text);
+                    const textWidth = metrics.width;
+                    const textHeight = 20;
+                    if (x >= end.x + 5 && x <= end.x + 5 + textWidth + 10 && 
+                        y >= end.y - textHeight/2 && y <= end.y + textHeight/2) {
+                        return item;
+                    }
+                }
+            }
+            
+            return null;
+        }
+
+        function findEndpointAt(x, y, threshold = 10) {
+            for (let i = 0; i < state.items.length; i++) {
+                const item = state.items[i];
+                
+                if (item.type === 'line') {
+                    const p1 = worldToScreen(item.x1, item.y1);
+                    const p2 = worldToScreen(item.x2, item.y2);
+                    
+                    if (Math.hypot(x - p1.x, y - p1.y) <= threshold) {
+                        return { item, point: 'start', index: 0 };
+                    }
+                    if (Math.hypot(x - p2.x, y - p2.y) <= threshold) {
+                        return { item, point: 'end', index: 1 };
+                    }
+                }
+            }
+            
+            return null;
+        }
+
+        function distancePointToLine(px, py, x1, y1, x2, y2) {
+            const A = px - x1;
+            const B = py - y1;
+            const C = x2 - x1;
+            const D = y2 - y1;
+            
+            const dot = A * C + B * D;
+            const lenSq = C * C + D * D;
+            let param = -1;
+            
+            if (lenSq !== 0) {
+                param = dot / lenSq;
+            }
+            
+            let xx, yy;
+            
+            if (param < 0) {
+                xx = x1;
+                yy = y1;
+            } else if (param > 1) {
+                xx = x2;
+                yy = y2;
+            } else {
+                xx = x1 + param * C;
+                yy = y1 + param * D;
+            }
+            
+            const dx = px - xx;
+            const dy = py - yy;
+            
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function generateArrowColor() {
+            // 获取前一个线段的颜色（如果存在）
+            const lineItems = state.items.filter(i => i.type === 'line');
+            const currentIndex = lineItems.length;
+            let previousColor = null;
+            
+            if (currentIndex > 0) {
+                const previousItem = lineItems[currentIndex - 1];
+                previousColor = previousItem.arrowColor;
+            }
+            
+            // 生成鲜艳的随机颜色，确保与前一个不同
+            let newColor;
+            do {
+                const hue = Math.floor(Math.random() * 360);
+                const saturation = 70 + Math.floor(Math.random() * 30); // 70-100%
+                const lightness = 40 + Math.floor(Math.random() * 20); // 40-60%
+                newColor = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+            } while (newColor === previousColor);
+            
+            return newColor;
+        }
+
+        function addLine(x1, y1, x2, y2) {
+            const line = {
+                type: 'line',
+                x1: snapToGrid(x1),
+                y1: snapToGrid(y1),
+                x2: snapToGrid(x2),
+                y2: snapToGrid(y2),
+                arrowColor: generateArrowColor()
+            };
+            
+            state.items.push(line);
+            state.selectedItem = line;
+            saveState();
+            draw();
+            
+            // 更新当前线段起点为新线段的终点，以便继续绘制
+            if (state.currentTool === 'line' && state.currentLineStart) {
+                state.currentLineStart.x = line.x2;
+                state.currentLineStart.y = line.y2;
+            }
+        }
+
+        function addLeaderText(startX, startY, endX, endY, text) {
+            const leaderText = {
+                type: 'leader-text',
+                startX: snapToGrid(startX),
+                startY: snapToGrid(startY),
+                endX: snapToGrid(endX),
+                endY: snapToGrid(endY),
+                text: text || '标注文本'
+            };
+            
+            state.items.push(leaderText);
+            state.selectedItem = leaderText;
+            saveState();
+            draw();
+        }
+
+        function showLineOptionsModal(x, y) {
+            const modal = document.getElementById('param-modal');
+            const mask = document.getElementById('param-mask');
+            const content = document.getElementById('param-content');
+            
+            // 检查是否有线段可以继续绘制
+            const hasLines = state.items.some(item => item.type === 'line');
+            
+            let optionsHTML = `
+                <div class="text-center mb-4">
+                    <p class="text-gray-600">请选择绘制方式</p>
+                </div>
+                <div class="flex flex-col gap-3">
+            `;
+            
+            // 只有在有线段的情况下才显示"继续端点绘制"选项
+            if (hasLines) {
+                optionsHTML += `
+                    <button id="continue-endpoint-btn" class="param-btn param-btn-primary">继续端点绘制</button>
+                `;
+            }
+            
+            // 总是显示"新起绘制"选项
+            optionsHTML += `
+                    <button id="new-line-btn" class="param-btn param-btn-secondary">新起绘制</button>
+                </div>
+            `;
+            
+            content.innerHTML = optionsHTML;
+            
+            modal.classList.remove('hidden');
+            mask.classList.remove('hidden');
+            
+            // 如果有线段，绑定"继续端点绘制"按钮事件
+            if (hasLines) {
+                document.getElementById('continue-endpoint-btn').onclick = () => {
+                    // 找到最后一条线段
+                    const lastLine = state.items.filter(item => item.type === 'line').pop();
+                    if (lastLine) {
+                        // 使用最后一条线段的终点作为新线段的起点
+                        const startX = lastLine.x2;
+                        const startY = lastLine.y2;
+                        closeAllModals();
+                        // 保存当前线段起点，以便在方向模态框中使用
+                        state.currentLineStart = { x: startX, y: startY };
+                        showDirectionModal(startX, startY, true);
+                    } else {
+                        closeAllModals();
+                        showDirectionModal(x, y, false);
+                    }
+                };
+            }
+            
+            // 绑定"新起绘制"按钮事件
+            document.getElementById('new-line-btn').onclick = () => {
+                closeAllModals();
+                showDirectionModal(x, y, false);
+            };
+            
+            document.getElementById('param-cancel').onclick = closeAllModals;
+        }
+
+        function showDirectionModal(x, y, continueEndpoint = false) {
+            const modal = document.getElementById('dir-modal');
+            const mask = document.getElementById('dir-mask');
+            
+            state.currentLineStart = { x, y, continueEndpoint };
+            
+            modal.classList.remove('hidden');
+            mask.classList.remove('hidden');
+            
+            // 更新长度输入框的焦点
+            setTimeout(() => {
+                const lengthInput = document.getElementById('dir-length-input');
+                if (lengthInput) {
+                    lengthInput.focus();
+                    lengthInput.select();
+                }
+            }, 100);
+        }
+
+        function handleDirButtonClick(dir) {
+            if (!state.currentLineStart) return;
+            
+            const { x, y, continueEndpoint } = state.currentLineStart;
+            const lengthInput = document.getElementById('dir-length-input');
+            const offsetInput = document.getElementById('dir-offset-input');
+            
+            const length = lengthInput ? parseFloat(lengthInput.value) || 3000 : 3000;
+            const offset = offsetInput ? parseFloat(offsetInput.value) || 0 : 0;
+            
+            let endX = x, endY = y;
+            
+            switch (dir) {
+                case 'up':
+                    endY = y - length;
+                    // 添加水平偏移
+                    endX = x + offset;
+                    break;
+                case 'down':
+                    endY = y + length;
+                    // 添加水平偏移
+                    endX = x + offset;
+                    break;
+                case 'left':
+                    endX = x - length;
+                    // 添加垂直偏移
+                    endY = y + offset;
+                    break;
+                case 'right':
+                    endX = x + length;
+                    // 添加垂直偏移
+                    endY = y + offset;
+                    break;
+                case 'up-left':
+                    endX = x - length;
+                    endY = y - length;
+                    // 添加对角线偏移
+                    endX += offset;
+                    endY += offset;
+                    break;
+                case 'up-right':
+                    endX = x + length;
+                    endY = y - length;
+                    // 添加对角线偏移
+                    endX += offset;
+                    endY -= offset;
+                    break;
+                case 'down-left':
+                    endX = x - length;
+                    endY = y + length;
+                    // 添加对角线偏移
+                    endX -= offset;
+                    endY += offset;
+                    break;
+                case 'down-right':
+                    endX = x + length;
+                    endY = y + length;
+                    // 添加对角线偏移
+                    endX += offset;
+                    endY += offset;
+                    break;
+                case 'center':
+                    // 中心按钮，不绘制
+                    return;
+            }
+            
+            addLine(x, y, endX, endY);
+            
+            // 清空输入框，让用户直接输入下一个长度
+            document.getElementById('dir-length-input').value = '';
+            document.getElementById('dir-length-input').focus();
+            document.getElementById('dir-length-input').select();
+        }
+
+        function showTextInputModal(startX, startY, endX, endY) {
+            const modal = document.getElementById('param-modal');
+            const mask = document.getElementById('param-mask');
+            const content = document.getElementById('param-content');
+            
+            content.innerHTML = `
+                <div class="param-group">
+                    <label class="param-label">文本内容</label>
+                    <input type="text" class="param-input" id="text-input" placeholder="请输入标注文本" value="标注文本">
+                </div>
+            `;
+            
+            modal.classList.remove('hidden');
+            mask.classList.remove('hidden');
+            
+            // 自动聚焦
+            setTimeout(() => {
+                const input = document.getElementById('text-input');
+                if (input) {
+                    input.focus();
+                    input.select();
+                }
+            }, 100);
+            
+            document.getElementById('param-ok').onclick = () => {
+                const text = document.getElementById('text-input').value;
+                addLeaderText(startX, startY, endX, endY, text);
+                
+                closeAllModals();
+            };
+            
+            document.getElementById('param-cancel').onclick = closeAllModals;
+        }
+
+        function showTextEditModal(item) {
+            const modal = document.getElementById('param-modal');
+            const mask = document.getElementById('param-mask');
+            const content = document.getElementById('param-content');
+            
+            content.innerHTML = `
+                <div class="param-group">
+                    <label class="param-label">编辑文本</label>
+                    <input type="text" class="param-input" id="text-edit-input" placeholder="请输入文本内容" value="${item.text}">
+                </div>
+            `;
+            
+            // 保存备份
+            state.currentEditingItem = item;
+            state.currentEditingBackup = { ...item };
+            
+            modal.classList.remove('hidden');
+            mask.classList.remove('hidden');
+            
+            // 自动聚焦
+            setTimeout(() => {
+                const input = document.getElementById('text-edit-input');
+                if (input) {
+                    input.focus();
+                    input.select();
+                }
+            }, 100);
+            
+            // 先删除原来的删除按钮，避免重复
+            const buttonContainer = document.querySelector('#param-modal .param-buttons');
+            const oldDeleteBtn = buttonContainer.querySelector('.delete-btn');
+            if (oldDeleteBtn) {
+                buttonContainer.removeChild(oldDeleteBtn);
+            }
+            
+            // 添加删除按钮
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'param-btn bg-red-500 text-white delete-btn';
+            deleteBtn.textContent = '删除';
+            deleteBtn.onclick = () => {
+                const index = state.items.indexOf(item);
+                if (index > -1) {
+                    state.items.splice(index, 1);
+                    state.selectedItem = null;
+                    saveState();
+                    draw();
+                }
+                closeAllModals();
+            };
+            
+            buttonContainer.appendChild(deleteBtn);
+            
+            document.getElementById('param-ok').onclick = () => {
+                const text = document.getElementById('text-edit-input').value;
+                item.text = text;
+                saveState();
+                draw();
+                
+                closeAllModals();
+            };
+            
+            document.getElementById('param-cancel').onclick = closeAllModals;
+        }
+
+        function showPropertiesModal(item) {
+            const modal = document.getElementById('param-modal');
+            const mask = document.getElementById('param-mask');
+            const content = document.getElementById('param-content');
+            
+            // 保存备份
+            state.currentEditingItem = item;
+            state.currentEditingBackup = JSON.parse(JSON.stringify(item));
+            
+            content.innerHTML = '';
+            
+            if (item.type === 'line') {
+                // 计算线段长度
+                const length = Math.round(Math.hypot(item.x2 - item.x1, item.y2 - item.y1));
+                // 计算线段角度
+                const angle = Math.atan2(item.y2 - item.y1, item.x2 - item.x1);
+                
+                // 创建长度输入框
+                const lengthGroup = document.createElement('div');
+                lengthGroup.className = 'param-group';
+                
+                const lengthLabel = document.createElement('label');
+                lengthLabel.className = 'param-label';
+                lengthLabel.textContent = '长度 (mm)';
+                
+                const lengthInput = document.createElement('input');
+                lengthInput.type = 'number';
+                lengthInput.className = 'param-input';
+                lengthInput.value = length;
+                lengthInput.min = '1';
+                
+                // 存储原始数据用于长度更新
+                lengthInput.dataset.originalLength = length;
+                lengthInput.dataset.angle = angle;
+                lengthInput.dataset.startX = item.x1;
+                lengthInput.dataset.startY = item.y1;
+                
+                lengthGroup.appendChild(lengthLabel);
+                lengthGroup.appendChild(lengthInput);
+                content.appendChild(lengthGroup);
+            }
+            else if (item.type === 'rect') {
+                createInput('左上角 X (mm)', item.x1, (value) => item.x1 = value);
+                createInput('左上角 Y (mm)', item.y1, (value) => item.y1 = value);
+                createInput('右下角 X (mm)', item.x2, (value) => item.x2 = value);
+                createInput('右下角 Y (mm)', item.y2, (value) => item.y2 = value);
+            }
+            else if (item.type === 'arc') {
+                createInput('圆心 X (mm)', item.cx, (value) => item.cx = value);
+                createInput('圆心 Y (mm)', item.cy, (value) => item.cy = value);
+                createInput('半径 (mm)', item.radius, (value) => item.radius = value);
+                createInput('起始角度 (度)', (item.startAngle * 180 / Math.PI).toFixed(1), (value) => item.startAngle = parseFloat(value) * Math.PI / 180);
+                createInput('结束角度 (度)', (item.endAngle * 180 / Math.PI).toFixed(1), (value) => item.endAngle = parseFloat(value) * Math.PI / 180);
+            }
+            else if (item.type === 'leader-text') {
+                createInput('起点 X (mm)', item.startX, (value) => item.startX = value);
+                createInput('起点 Y (mm)', item.startY, (value) => item.startY = value);
+                createInput('终点 X (mm)', item.endX, (value) => item.endX = value);
+                createInput('终点 Y (mm)', item.endY, (value) => item.endY = value);
+                createInput('文本内容', item.text, (value) => item.text = value);
+            }
+            
+            function createInput(label, value, setter) {
+                const group = document.createElement('div');
+                group.className = 'param-group';
+                
+                const labelEl = document.createElement('label');
+                labelEl.className = 'param-label';
+                labelEl.textContent = label;
+                
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'param-input';
+                input.value = value;
+                
+                // 只在输入的时候临时保存，不修改原对象，直到用户点击确定
+                input.dataset.setter = setter.toString();
+                
+                group.appendChild(labelEl);
+                group.appendChild(input);
+                content.appendChild(group);
+            }
+            
+            modal.classList.remove('hidden');
+            mask.classList.remove('hidden');
+            
+            // 先删除原来的删除按钮，避免重复
+            const buttonContainer = document.querySelector('#param-modal .param-buttons');
+            const oldDeleteBtn = buttonContainer.querySelector('.delete-btn');
+            if (oldDeleteBtn) {
+                buttonContainer.removeChild(oldDeleteBtn);
+            }
+            
+            // 添加删除按钮
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'param-btn bg-red-500 text-white delete-btn';
+            deleteBtn.textContent = '删除';
+            deleteBtn.onclick = () => {
+                const index = state.items.indexOf(item);
+                if (index > -1) {
+                    state.items.splice(index, 1);
+                    state.selectedItem = null;
+                    saveState();
+                    draw();
+                }
+                closeAllModals();
+            };
+            
+            buttonContainer.appendChild(deleteBtn);
+            
+            document.getElementById('param-ok').onclick = () => {
+                // 应用所有输入的修改
+                const inputs = content.querySelectorAll('.param-input');
+                inputs.forEach(input => {
+                    if (item.type === 'line' && input.value !== undefined && input.dataset.originalLength !== undefined) {
+                        // 处理线段长度更新
+                        const newLength = parseFloat(input.value) || 1;
+                        const angle = parseFloat(input.dataset.angle);
+                        
+                        // 从尾端增加或减少长度
+                        // 保持起点不变，更新终点
+                        item.x2 = item.x1 + Math.cos(angle) * newLength;
+                        item.y2 = item.y1 + Math.sin(angle) * newLength;
+                    } else if (input.dataset.setter) {
+                        // 处理其他类型的参数更新
+                        try {
+                            const setter = new Function('item', 'value', input.dataset.setter);
+                            const val = parseFloat(input.value) || input.value;
+                            setter(item, val);
+                        } catch(e) {
+                            console.error('参数修改错误', e);
+                        }
+                    }
+                });
+                
+                saveState();
+                draw();
+                closeAllModals();
+            };
+            
+            document.getElementById('param-cancel').onclick = () => {
+                // 恢复原始数据
+                if (state.currentEditingBackup && state.currentEditingItem) {
+                    Object.assign(state.currentEditingItem, state.currentEditingBackup);
+                    draw();
+                }
+                closeAllModals();
+            };
+        }
+
+        function exportPNG() {
+            try {
+                const link = document.createElement('a');
+                link.download = 'Size_' + new Date().getTime() + '.png';
+                
+                // 计算所有元素的边界
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                
+                // 临时ctx用于测量文本宽度
+                const tempCtx = document.createElement('canvas').getContext('2d');
+                tempCtx.font = '14px sans-serif';
+                
+                state.items.forEach(item => {
+                    if (item.type === 'line') {
+                        minX = Math.min(minX, item.x1, item.x2);
+                        minY = Math.min(minY, item.y1, item.y2);
+                        maxX = Math.max(maxX, item.x1, item.x2);
+                        maxY = Math.max(maxY, item.y1, item.y2);
+                    } else if (item.type === 'rect') {
+                        minX = Math.min(minX, item.x1, item.x2);
+                        minY = Math.min(minY, item.y1, item.y2);
+                        maxX = Math.max(maxX, item.x1, item.x2);
+                        maxY = Math.max(maxY, item.y1, item.y2);
+                    } else if (item.type === 'arc') {
+                        const radius = item.radius;
+                        minX = Math.min(minX, item.cx - radius);
+                        minY = Math.min(minY, item.cy - radius);
+                        maxX = Math.max(maxX, item.cx + radius);
+                        maxY = Math.max(maxY, item.cy + radius);
+                    } else if (item.type === 'leader-text') {
+                        minX = Math.min(minX, item.startX, item.endX);
+                        minY = Math.min(minY, item.startY, item.endY);
+                        // 考虑文本的宽度，确保文本不会被截断
+                        const textWidth = tempCtx.measureText(item.text).width / state.transform.scale;
+                        maxX = Math.max(maxX, item.startX, item.endX + textWidth + 200); // 200mm的边距
+                        maxY = Math.max(maxY, item.startY, item.endY);
+                    }
+                });
+                
+                // 如果没有元素，使用当前视图范围
+                if (minX === Infinity) {
+                    const centerX = canvas.width / 2 / state.transform.scale - state.transform.x / state.transform.scale;
+                    const centerY = canvas.height / 2 / state.transform.scale - state.transform.y / state.transform.scale;
+                    const range = 10000; // 10米范围
+                    minX = centerX - range / 2;
+                    minY = centerY - range / 2;
+                    maxX = centerX + range / 2;
+                    maxY = centerY + range / 2;
+                }
+                
+                // 添加边距（确保标注和文本完全显示）
+                const margin = 1500;
+                minX -= margin;
+                minY -= margin;
+                maxX += margin;
+                maxY += margin;
+                
+                const width = maxX - minX;
+                const height = maxY - minY;
+                
+                // 2x分辨率，让导出的图片更清晰
+                const scale = 2;
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = Math.max(1600, width * state.transform.scale * scale); // 最小宽度1600px
+                tempCanvas.height = Math.max(1200, height * state.transform.scale * scale); // 最小高度1200px
+                const exportCtx = tempCanvas.getContext('2d');
+                
+                // 填充白色背景
+                exportCtx.fillStyle = '#ffffff';
+                exportCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+                
+                // 设置导出专用的变换
+                const exportTransform = {
+                    x: -minX * state.transform.scale * scale,
+                    y: -minY * state.transform.scale * scale,
+                    scale: state.transform.scale * scale
+                };
+                
+                // 绘制网格
+                drawExportGrid(exportCtx, exportTransform);
+                
+                // 绘制所有项目
+                drawExportItems(exportCtx, exportTransform);
+                
+                // 转换为PNG数据URL
+                const dataURL = tempCanvas.toDataURL('image/png');
+                link.href = dataURL;
+                link.click();
+            } catch (error) {
+                console.error('导出图片失败:', error);
+                alert('导出图片失败，请重试。错误信息: ' + error.message);
+            }
+        }
+        
+        // 绘制导出用的网格
+        function drawExportGrid(ctx, transform) {
+            const gridSize = 100;
+            const screenGrid = gridSize * transform.scale;
+            
+            const startX = Math.floor((-transform.x / transform.scale) / gridSize) * gridSize;
+            const startY = Math.floor((-transform.y / transform.scale) / gridSize) * gridSize;
+            const endX = startX + (ctx.canvas.width / transform.scale);
+            const endY = startY + (ctx.canvas.height / transform.scale);
+            
+            ctx.strokeStyle = '#e2e8f0';
+            ctx.lineWidth = 1;
+            
+            for (let x = startX; x <= endX; x += gridSize) {
+                const screenX = x * transform.scale + transform.x;
+                ctx.beginPath();
+                ctx.moveTo(screenX, 0);
+                ctx.lineTo(screenX, ctx.canvas.height);
+                ctx.stroke();
+            }
+            
+            for (let y = startY; y <= endY; y += gridSize) {
+                const screenY = y * transform.scale + transform.y;
+                ctx.beginPath();
+                ctx.moveTo(0, screenY);
+                ctx.lineTo(ctx.canvas.width, screenY);
+                ctx.stroke();
+            }
+        }
+        
+        // 绘制导出用的所有项目
+        function drawExportItems(ctx, transform) {
+            state.items.forEach(item => {
+                if (item.type === 'line') {
+                    const p1 = {
+                        x: item.x1 * transform.scale + transform.x,
+                        y: item.y1 * transform.scale + transform.y
+                    };
+                    const p2 = {
+                        x: item.x2 * transform.scale + transform.x,
+                        y: item.y2 * transform.scale + transform.y
+                    };
+                    
+                    const arrowColor = item.arrowColor;
+                    
+                    // 绘制线段（黑色）
+                    ctx.beginPath();
+                    ctx.moveTo(p1.x, p1.y);
+                    ctx.lineTo(p2.x, p2.y);
+                    ctx.strokeStyle = 'rgb(0, 0, 0)';
+                    ctx.lineWidth = 2 * 2; // 2x分辨率，线宽也翻倍
+                    ctx.lineCap = 'round';
+                    ctx.stroke();
+                    
+                    // 绘制小箭头表示方向
+                    const arrowSize = 6 * 2; // 2x分辨率，箭头大小也翻倍
+                    const dx = p2.x - p1.x;
+                    const dy = p2.y - p1.y;
+                    const length = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (length > 100 * 2) {
+                        const arrowX = p1.x + (dx * 0.5);
+                        const arrowY = p1.y + (dy * 0.5);
+                        const angle = Math.atan2(dy, dx);
+                        
+                        ctx.beginPath();
+                        ctx.moveTo(arrowX, arrowY);
+                        ctx.lineTo(
+                            arrowX - arrowSize * Math.cos(angle - Math.PI / 6),
+                            arrowY - arrowSize * Math.sin(angle - Math.PI / 6)
+                        );
+                        ctx.moveTo(arrowX, arrowY);
+                        ctx.lineTo(
+                            arrowX - arrowSize * Math.cos(angle + Math.PI / 6),
+                            arrowY - arrowSize * Math.sin(angle + Math.PI / 6)
+                        );
+                        ctx.strokeStyle = arrowColor;
+                        ctx.lineWidth = 2 * 2;
+                        ctx.stroke();
+                    }
+                    
+                    // 绘制尺寸标注
+                    drawExportDimension(ctx, item.x1, item.y1, item.x2, item.y2, arrowColor, transform);
+                }
+                else if (item.type === 'rect') {
+                    const p1 = {
+                        x: item.x1 * transform.scale + transform.x,
+                        y: item.y1 * transform.scale + transform.y
+                    };
+                    const p2 = {
+                        x: item.x2 * transform.scale + transform.x,
+                        y: item.y2 * transform.scale + transform.y
+                    };
+                    
+                    const x = Math.min(p1.x, p2.x);
+                    const y = Math.min(p1.y, p2.y);
+                    const w = Math.abs(p2.x - p1.x);
+                    const h = Math.abs(p2.y - p1.y);
+                    
+                    ctx.fillStyle = 'rgba(59, 130, 246, 0.1)';
+                    ctx.strokeStyle = '#3b82f6';
+                    ctx.lineWidth = 2 * 2;
+                    ctx.fillRect(x, y, w, h);
+                    ctx.strokeRect(x, y, w, h);
+                }
+                else if (item.type === 'arc') {
+                    const p = {
+                        x: item.cx * transform.scale + transform.x,
+                        y: item.cy * transform.scale + transform.y
+                    };
+                    const screenRadius = item.radius * transform.scale;
+                    
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, screenRadius, item.startAngle, item.endAngle);
+                    ctx.strokeStyle = '#3b82f6';
+                    ctx.lineWidth = 2 * 2;
+                    ctx.stroke();
+                }
+                else if (item.type === 'leader-text') {
+                    const start = {
+                        x: item.startX * transform.scale + transform.x,
+                        y: item.startY * transform.scale + transform.y
+                    };
+                    const end = {
+                        x: item.endX * transform.scale + transform.x,
+                        y: item.endY * transform.scale + transform.y
+                    };
+                    
+                    // 绘制引线
+                    ctx.beginPath();
+                    ctx.moveTo(start.x, start.y);
+                    ctx.lineTo(end.x, end.y);
+                    ctx.strokeStyle = '#22c55e';
+                    ctx.lineWidth = 1 * 2;
+                    ctx.stroke();
+                    
+                    // 绘制箭头
+                    const angle = Math.atan2(end.y - start.y, end.x - start.x);
+                    const arrowSize = 5 * 2;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(end.x, end.y);
+                    ctx.lineTo(
+                        end.x - arrowSize * Math.cos(angle - Math.PI / 6),
+                        end.y - arrowSize * Math.sin(angle - Math.PI / 6)
+                    );
+                    ctx.moveTo(end.x, end.y);
+                    ctx.lineTo(
+                        end.x - arrowSize * Math.cos(angle + Math.PI / 6),
+                        end.y - arrowSize * Math.sin(angle + Math.PI / 6)
+                    );
+                    ctx.strokeStyle = '#22c55e';
+                    ctx.lineWidth = 1 * 2;
+                    ctx.stroke();
+                    
+                    // 绘制文本
+                    ctx.fillStyle = '#1e293b';
+                    ctx.font = '28px sans-serif'; // 2x分辨率，字体大小也翻倍
+                    ctx.textAlign = 'left';
+                    ctx.textBaseline = 'middle';
+                    
+                    const textX = end.x + 10 * 2;
+                    const textY = end.y;
+                    
+                    ctx.fillText(item.text, textX, textY);
+                }
+            });
+        }
+        
+        // 绘制导出用的尺寸标注
+        function drawExportDimension(ctx, x1, y1, x2, y2, color, transform) {
+            const p1 = {
+                x: x1 * transform.scale + transform.x,
+                y: y1 * transform.scale + transform.y
+            };
+            const p2 = {
+                x: x2 * transform.scale + transform.x,
+                y: y2 * transform.scale + transform.y
+            };
+            const length = Math.round(Math.hypot(x2 - x1, y2 - y1));
+            
+            // 尺寸标识线使用半透明黑色
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.lineWidth = 1 * 2;
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+            
+            const offset = 20 * 2;
+            const angle = Math.atan2(y2 - y1, x2 - x1);
+            const dx = -Math.sin(angle) * offset;
+            const dy = Math.cos(angle) * offset;
+            
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p1.x + dx, p1.y + dy);
+            ctx.moveTo(p2.x, p2.y);
+            ctx.lineTo(p2.x + dx, p2.y + dy);
+            ctx.stroke();
+            
+            const arrowSize = 5 * 2;
+            ctx.beginPath();
+            ctx.moveTo(p1.x + dx, p1.y + dy);
+            ctx.lineTo(p1.x + dx - Math.cos(angle - Math.PI/4) * arrowSize, p1.y + dy - Math.sin(angle - Math.PI/4) * arrowSize);
+            ctx.moveTo(p1.x + dx, p1.y + dy);
+            ctx.lineTo(p1.x + dx - Math.cos(angle + Math.PI/4) * arrowSize, p1.y + dy - Math.sin(angle + Math.PI/4) * arrowSize);
+            
+            ctx.moveTo(p2.x + dx, p2.y + dy);
+            ctx.lineTo(p2.x + dx - Math.cos(angle - Math.PI + Math.PI/4) * arrowSize, p2.y + dy - Math.sin(angle - Math.PI + Math.PI/4) * arrowSize);
+            ctx.moveTo(p2.x + dx, p2.y + dy);
+            ctx.lineTo(p2.x + dx - Math.cos(angle - Math.PI - Math.PI/4) * arrowSize, p2.y + dy - Math.sin(angle - Math.PI - Math.PI/4) * arrowSize);
+            ctx.stroke();
+            
+            const midX = (p1.x + p2.x) / 2 + dx;
+            const midY = (p1.y + p2.y) / 2 + dy;
+            ctx.fillStyle = color;
+            ctx.font = '24px sans-serif'; // 2x分辨率，字体大小也翻倍
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(length + 'mm', midX, midY);
+        }
+
+        function undo() {
+            if (state.historyIndex > 0) {
+                state.historyIndex--;
+                state.items = JSON.parse(state.history[state.historyIndex]);
+                state.selectedItem = null;
+                draw();
+            }
+        }
+
+        function redo() {
+            if (state.historyIndex < state.history.length - 1) {
+                state.historyIndex++;
+                state.items = JSON.parse(state.history[state.historyIndex]);
+                state.selectedItem = null;
+                draw();
+            }
+        }
+
+        canvas.onmousedown = (e) => {
+            // 点击其他地方关闭右键菜单
+            closeContextMenu();
+            // 关闭所有弹窗
+            closeAllModals();
+            
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            if (e.button === 1 || (e.button === 0 && e.ctrlKey)) {
+                state.isPanning = true;
+                state.panStart = { x, y };
+                canvas.style.cursor = 'grabbing';
+                return;
+            }
+            
+            if (state.currentTool === 'select') {
+                const endpoint = findEndpointAt(x, y);
+                if (endpoint) {
+                    state.editingEndpoint = endpoint;
+                    state.isDragging = true;
+                    return;
+                }
+                
+                const item = findItemAt(x, y);
+                state.selectedItem = item;
+                
+                if (item) {
+                    state.isDragging = true;
+                    state.dragStart = { x, y };
+                }
+                
+                draw();
+            }
+            else if (state.currentTool === 'line') {
+                const world = screenToWorld(x, y);
+                showLineOptionsModal(world.x, world.y);
+            }
+            else if (state.currentTool === 'leader-text') {
+                const world = screenToWorld(x, y);
+                state.tempLine = {
+                    x1: world.x,
+                    y1: world.y,
+                    x2: world.x,
+                    y2: world.y
+                };
+                state.isDragging = true;
+            }
+        };
+
+        canvas.onmousemove = (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            if (state.isPanning) {
+                const dx = x - state.panStart.x;
+                const dy = y - state.panStart.y;
+                
+                state.transform.x += dx;
+                state.transform.y += dy;
+                
+                state.panStart = { x, y };
+                draw();
+                return;
+            }
+            
+            if (state.currentTool === 'select') {
+                const endpoint = findEndpointAt(x, y);
+                const item = findItemAt(x, y);
+                
+                if (endpoint) {
+                    canvas.style.cursor = 'pointer';
+                } else if (item) {
+                    canvas.style.cursor = 'move';
+                } else {
+                    canvas.style.cursor = 'default';
+                }
+                
+                if (state.isDragging && state.editingEndpoint) {
+                    const world = screenToWorld(x, y);
+                    const snappedX = snapToGrid(world.x);
+                    const snappedY = snapToGrid(world.y);
+                    
+                    const { item, point } = state.editingEndpoint;
+                    
+                    if (point === 'start') {
+                        item.x1 = snappedX;
+                        item.y1 = snappedY;
+                    } else if (point === 'end') {
+                        item.x2 = snappedX;
+                        item.y2 = snappedY;
+                    }
+                    
+                    draw();
+                }
+                else if (state.isDragging && state.selectedItem) {
+                    const dx = (x - state.dragStart.x) / state.transform.scale;
+                    const dy = (y - state.dragStart.y) / state.transform.scale;
+                    
+                    const item = state.selectedItem;
+                    
+                    if (item.type === 'line') {
+                        item.x1 += dx;
+                        item.y1 += dy;
+                        item.x2 += dx;
+                        item.y2 += dy;
+                    }
+                    else if (item.type === 'rect') {
+                        item.x1 += dx;
+                        item.y1 += dy;
+                        item.x2 += dx;
+                        item.y2 += dy;
+                    }
+                    else if (item.type === 'arc') {
+                        item.cx += dx;
+                        item.cy += dy;
+                    }
+                    else if (item.type === 'leader-text') {
+                        item.startX += dx;
+                        item.startY += dy;
+                        item.endX += dx;
+                        item.endY += dy;
+                    }
+                    
+                    state.dragStart = { x, y };
+                    draw();
+                }
+            }
+            else if (state.currentTool === 'leader-text' && state.isDragging && state.tempLine) {
+                const world = screenToWorld(x, y);
+                state.tempLine.x2 = world.x;
+                state.tempLine.y2 = world.y;
+                draw();
+            }
+        };
+
+        canvas.onmouseup = (e) => {
+            if (state.isPanning) {
+                state.isPanning = false;
+                canvas.style.cursor = 'default';
+                return;
+            }
+            
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            if (state.currentTool === 'leader-text' && state.isDragging && state.tempLine) {
+                const world = screenToWorld(x, y);
+                
+                showTextInputModal(state.tempLine.x1, state.tempLine.y1, world.x, world.y);
+                
+                state.tempLine = null;
+            }
+            
+            // 检查是否是点击线段（没有拖拽）
+            if (state.currentTool === 'select' && state.selectedItem && state.selectedItem.type === 'line' && !state.editingEndpoint) {
+                // 计算点击距离
+                const dragDistance = Math.hypot(x - state.dragStart.x, y - state.dragStart.y);
+                
+                // 如果点击距离很小，认为是点击而不是拖拽
+                if (dragDistance < 5) {
+                    // 确认点击位置确实在线段上
+                    const clickedItem = findItemAt(x, y);
+                    if (clickedItem === state.selectedItem) {
+                        showPropertiesModal(state.selectedItem);
+                    }
+                }
+            }
+            
+            state.isDragging = false;
+            state.editingEndpoint = null;
+        };
+
+        canvas.onwheel = (e) => {
+            e.preventDefault();
+            
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            const scaleFactor = e.deltaY > 0 ? 0.9 : 1.1;
+            const newScale = Math.max(0.01, Math.min(2, state.transform.scale * scaleFactor));
+            
+            const worldX = (x - state.transform.x) / state.transform.scale;
+            const worldY = (y - state.transform.y) / state.transform.scale;
+            
+            state.transform.scale = newScale;
+            state.transform.x = x - worldX * newScale;
+            state.transform.y = y - worldY * newScale;
+            
+            draw();
+        };
+
+        canvas.ondblclick = (e) => {
+            e.preventDefault();
+            
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            const item = findItemAt(x, y);
+            
+            if (item && item.type === 'leader-text') {
+                showTextEditModal(item);
+            }
+        };
+
+        canvas.oncontextmenu = (e) => {
+            e.preventDefault();
+            closeContextMenu();
+            
+            if (state.selectedItem) {
+                const menu = document.createElement('div');
+                menu.className = 'context-menu';
+                
+                const editBtn = document.createElement('div');
+                editBtn.className = 'context-menu-item';
+                editBtn.textContent = '编辑属性';
+                editBtn.onclick = () => {
+                    showPropertiesModal(state.selectedItem);
+                    closeContextMenu();
+                };
+                
+                const deleteBtn = document.createElement('div');
+                deleteBtn.className = 'context-menu-item';
+                deleteBtn.textContent = '删除';
+                deleteBtn.onclick = () => {
+                    const index = state.items.indexOf(state.selectedItem);
+                    if (index > -1) {
+                        state.items.splice(index, 1);
+                        state.selectedItem = null;
+                        saveState();
+                        draw();
+                    }
+                    closeContextMenu();
+                };
+                
+                menu.appendChild(editBtn);
+                menu.appendChild(deleteBtn);
+                
+                menu.style.left = e.clientX + 'px';
+                menu.style.top = e.clientY + 'px';
+                
+                document.body.appendChild(menu);
+                state.contextMenu = menu;
+            }
+        };
+
+        // 点击页面其他地方关闭右键菜单
+        document.addEventListener('click', (e) => {
+            if (state.contextMenu && !state.contextMenu.contains(e.target)) {
+                closeContextMenu();
+            }
+        });
+
+        // 初始化方向按钮事件
+        function initDirButtons() {
+            const dirButtons = document.querySelectorAll('[data-dir]');
+            dirButtons.forEach(btn => {
+                btn.onclick = () => {
+                    handleDirButtonClick(btn.dataset.dir);
+                };
+            });
+            
+            // 取消按钮
+            document.getElementById('cancel-dir').onclick = closeAllModals;
+        }
+
+        document.getElementById('tool-select').onclick = () => {
+            state.currentTool = 'select';
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('tool-select').classList.add('active');
+        };
+
+        document.getElementById('tool-line').onclick = () => {
+            state.currentTool = 'line';
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('tool-line').classList.add('active');
+        };
+
+        document.getElementById('tool-leader-text').onclick = () => {
+            state.currentTool = 'leader-text';
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('tool-leader-text').classList.add('active');
+        };
+
+        document.getElementById('btn-undo').onclick = undo;
+        document.getElementById('btn-redo').onclick = redo;
+        document.getElementById('btn-export-png').onclick = exportPNG;
+
+        document.getElementById('scale-select').onchange = (e) => {
+            state.transform.scale = parseFloat(e.target.value);
+            draw();
+        };
+
+        window.onresize = resizeCanvas;
+        window.onkeydown = (e) => {
+            if (e.key === 'Delete' && state.selectedItem) {
+                const index = state.items.indexOf(state.selectedItem);
+                if (index > -1) {
+                    state.items.splice(index, 1);
+                    state.selectedItem = null;
+                    saveState();
+                    draw();
+                }
+            }
+            else if (e.ctrlKey && e.key === 'z') {
+                undo();
+            }
+            else if (e.ctrlKey && e.key === 'y') {
+                redo();
+            }
+        };
+
+        // 初始化
+        initDirButtons();
+        resizeCanvas();
+        saveState();
+    </script>
+</body>
+</html>
