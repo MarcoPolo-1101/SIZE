@@ -345,6 +345,11 @@
             draw();
         }
 
+        // 触摸相关变量
+        let touchStartDistance = null;
+        let touchStartMidpoint = null;
+        let touchStartPan = null;
+
         function screenToWorld(sx, sy) {
             return {
                 x: (sx - state.transform.x) / state.transform.scale,
