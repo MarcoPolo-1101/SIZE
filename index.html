@@ -1250,19 +1250,25 @@
                 
                 // 2x分辨率，让导出的图片更清晰
                 const scale = 2;
+                const contentWidth = width * state.transform.scale * scale;
+                const contentHeight = height * state.transform.scale * scale;
                 const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = Math.max(1600, width * state.transform.scale * scale); // 最小宽度1600px
-                tempCanvas.height = Math.max(1200, height * state.transform.scale * scale); // 最小高度1200px
+                tempCanvas.width = Math.max(1600, contentWidth); // 最小宽度1600px
+                tempCanvas.height = Math.max(1200, contentHeight); // 最小高度1200px
                 const exportCtx = tempCanvas.getContext('2d');
                 
                 // 填充白色背景
                 exportCtx.fillStyle = '#ffffff';
                 exportCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
                 
+                // 计算居中偏移，让内容在图片中居中显示
+                const xOffset = (tempCanvas.width - contentWidth) / 2;
+                const yOffset = (tempCanvas.height - contentHeight) / 2;
+                
                 // 设置导出专用的变换
                 const exportTransform = {
-                    x: -minX * state.transform.scale * scale,
-                    y: -minY * state.transform.scale * scale,
+                    x: -minX * state.transform.scale * scale + xOffset,
+                    y: -minY * state.transform.scale * scale + yOffset,
                     scale: state.transform.scale * scale
                 };
                 
